@@ -126,40 +126,32 @@ month : date [NOT NULL] — месяц планирования (хранитс�
 planned_amount : numeric(15,2) [NOT NULL] [CHECK >= 0] — плановая сумма расходов
 
 ## 4. Физическая модель (DDL для PostgreSQL)
--- 1. Таблица СЧЕТА
-CREATE TABLE accounts (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    bank_name VARCHAR(100),
-    type VARCHAR(50) NOT NULL CHECK (type IN ('дебетовый', 'кредитный', 'наличные')),
-    balance NUMERIC(15,2) NOT NULL DEFAULT 0.00
-);
-
--- 2. Таблица КАТЕГОРИИ
-CREATE TABLE categories (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    cat_type VARCHAR(10) NOT NULL CHECK (cat_type IN ('доход', 'расход'))
-);
-
--- 3. Таблица ТРАНЗАКЦИИ
-CREATE TABLE transactions (
-    id SERIAL PRIMARY KEY,
-    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    category_id INTEGER NOT NULL REFERENCES categories(id),
-    amount NUMERIC(15,2) NOT NULL CHECK (amount > 0),
-    operation_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    description TEXT
-);
-
--- 4. Таблица ПЛАНЫ_БЮДЖЕТА
-CREATE TABLE budget_plans (
-    id SERIAL PRIMARY KEY,
-    category_id INTEGER NOT NULL REFERENCES categories(id),
-    month DATE NOT NULL,
-    planned_amount NUMERIC(15,2) NOT NULL CHECK (planned_amount >= 0),
-    UNIQUE(category_id, month)
-);
+Сущность "СЧЕТА" (Accounts)
+Атрибут	Тип	Обязательность	Описание
+id	integer	✅ PK	Суррогатный первичный ключ
+name	varchar(100)	✅ NOT NULL	Название счета ("Основная карта")
+bank_name	varchar(100)	❌ NULL	Наименование банка
+type	varchar(50)	✅ NOT NULL	Тип: дебетовый/кредитный/наличные
+balance	numeric(15,2)	✅ NOT NULL	Текущий баланс
+Сущность "КАТЕГОРИИ" (Categories)
+Атрибут	Тип	Обязательность	Описание
+id	integer	✅ PK	Суррогатный первичный ключ
+name	varchar(100)	✅ NOT NULL	Название категории
+cat_type	varchar(10)	✅ NOT NULL	Тип: доход/расход
+Сущность "ТРАНЗАКЦИИ" (Transactions)
+Атрибут	Тип	Обязательность	Описание
+id	integer	✅ PK	Суррогатный первичный ключ
+account_id	integer	✅ FK → СЧЕТА	Ссылка на счет
+category_id	integer	✅ FK → КАТЕГОРИИ	Ссылка на категорию
+amount	numeric(15,2)	✅ NOT NULL	Сумма операции (>0)
+operation_date	date	✅ NOT NULL	Дата операции
+description	text	❌ NULL	Описание
+Сущность "ПЛАНЫ_БЮДЖЕТА" (BudgetPlans)
+Атрибут	Тип	Обязательность	Описание
+id	integer	✅ PK	Суррогатный первичный ключ
+category_id	integer	✅ FK → КАТЕГОРИИ	Категория расхода
+month	date	✅ NOT NULL	Месяц планирования
+planned_amount	numeric(15,2)	✅ NOT NULL	Плановая сумма (>=0)
 -- ============================================
 -- Индексы для оптимизации производительности
 -- ============================================

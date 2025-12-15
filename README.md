@@ -126,92 +126,40 @@ month : date [NOT NULL] — месяц планирования (хранитс�
 planned_amount : numeric(15,2) [NOT NULL] [CHECK >= 0] — плановая сумма расходов
 
 ## 4. Физическая модель (DDL для PostgreSQL)
--- ============================================
--- Создание таблиц для БД "Учет домашних финансов"
--- ============================================
-
--- 1. Таблица СЧЕТА (accounts)
+-- 1. Таблица СЧЕТА
 CREATE TABLE accounts (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     bank_name VARCHAR(100),
-    type VARCHAR(50) NOT NULL 
-        CHECK (type IN ('дебетовый', 'кредитный', 'наличные')),
+    type VARCHAR(50) NOT NULL CHECK (type IN ('дебетовый', 'кредитный', 'наличные')),
     balance NUMERIC(15,2) NOT NULL DEFAULT 0.00
 );
 
-COMMENT ON TABLE accounts IS 'Информация о банковских счетах и местах хранения денег';
-COMMENT ON COLUMN accounts.id IS 'Суррогатный первичный ключ';
-COMMENT ON COLUMN accounts.name IS 'Понятное название счета для пользователя';
-COMMENT ON COLUMN accounts.bank_name IS 'Наименование банка или места хранения';
-COMMENT ON COLUMN accounts.type IS 'Тип счета: дебетовый, кредитный, наличные';
-COMMENT ON COLUMN accounts.balance IS 'Текущий баланс на счете';
-
--- 2. Таблица КАТЕГОРИИ (categories)
+-- 2. Таблица КАТЕГОРИИ
 CREATE TABLE categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    cat_type VARCHAR(10) NOT NULL 
-        CHECK (cat_type IN ('доход', 'расход'))
+    cat_type VARCHAR(10) NOT NULL CHECK (cat_type IN ('доход', 'расход'))
 );
 
-COMMENT ON TABLE categories IS 'Справочник категорий доходов и расходов';
-COMMENT ON COLUMN categories.id IS 'Суррогатный первичный ключ';
-COMMENT ON COLUMN categories.name IS 'Наименование категории';
-COMMENT ON COLUMN categories.cat_type IS 'Тип операции: доход или расход';
-
--- 3. Таблица ТРАНЗАКЦИИ (transactions) - ядро системы
+-- 3. Таблица ТРАНЗАКЦИИ
 CREATE TABLE transactions (
     id SERIAL PRIMARY KEY,
-    account_id INTEGER NOT NULL 
-        REFERENCES accounts(id) 
-        ON DELETE CASCADE,
-    category_id INTEGER NOT NULL 
-        REFERENCES categories(id),
-    amount NUMERIC(15,2) NOT NULL 
-        CHECK (amount > 0),
-    operation_date DATE NOT NULL 
-        DEFAULT CURRENT_DATE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES categories(id),
+    amount NUMERIC(15,2) NOT NULL CHECK (amount > 0),
+    operation_date DATE NOT NULL DEFAULT CURRENT_DATE,
     description TEXT
 );
 
-COMMENT ON TABLE transactions IS 'Регистрация всех финансовых операций';
-COMMENT ON COLUMN transactions.id IS 'Суррогатный первичный ключ';
-COMMENT ON COLUMN transactions.account_id IS 'Ссылка на счет, с которым связана операция';
-COMMENT ON COLUMN transactions.category_id IS 'Категория операции (доход/расход)';
-COMMENT ON COLUMN transactions.amount IS 'Сумма операции (всегда положительная)';
-COMMENT ON COLUMN transactions.operation_date IS 'Дата совершения операции';
-COMMENT ON COLUMN transactions.description IS 'Необязательное описание или комментарий';
-
--- 4. Таблица ПЛАНЫ_БЮДЖЕТА (budget_plans)
+-- 4. Таблица ПЛАНЫ_БЮДЖЕТА
 CREATE TABLE budget_plans (
     id SERIAL PRIMARY KEY,
-    category_id INTEGER NOT NULL 
-        REFERENCES categories(id),
+    category_id INTEGER NOT NULL REFERENCES categories(id),
     month DATE NOT NULL,
-    planned_amount NUMERIC(15,2) NOT NULL 
-        CHECK (planned_amount >= 0),
-    
-    -- Один план на категорию в месяц
-    UNIQUE(category_id, month),
-    
-    -- Ограничение: план можно составить только для категорий расходов
-    CONSTRAINT budget_only_for_expenses 
-        CHECK (
-            EXISTS (
-                SELECT 1 FROM categories c 
-                WHERE c.id = category_id 
-                AND c.cat_type = 'расход'
-            )
-        )
+    planned_amount NUMERIC(15,2) NOT NULL CHECK (planned_amount >= 0),
+    UNIQUE(category_id, month)
 );
-
-COMMENT ON TABLE budget_plans IS 'Плановые показатели расходов по категориям на месяц';
-COMMENT ON COLUMN budget_plans.id IS 'Суррогатный первичный ключ';
-COMMENT ON COLUMN budget_plans.category_id IS 'Категория расхода (ссылка на categories)';
-COMMENT ON COLUMN budget_plans.month IS 'Месяц планирования (первое число месяца)';
-COMMENT ON COLUMN budget_plans.planned_amount IS 'Плановая сумма расходов на месяц';
-
 -- ============================================
 -- Индексы для оптимизации производительности
 -- ============================================
@@ -383,3 +331,17 @@ INSERT INTO budget_plans (category_id, month, planned_amount) VALUES
 (9, '2024-05-01', 2000.00);   -- Развлечения
 
 Итог: Предложенная модель полностью соответствует требованиям лабораторной работы, является нормализованной до 3НФ и готова к реализации в СУБД PostgreSQL.
+Тест таблиц GitHub
+
+## Таблица 1
+| Имя | Тип | Описание |
+|-----|-----|----------|
+| id | integer | Идентификатор |
+| name | text | Название |
+
+## Таблица 2
+| № | Статус | Комментарий |
+|---|--------|-------------|
+| 1 | ✅ | Выполнено |
+| 2 | ⏳ | В процессе |
+| 3 | ❌ | Отменено |

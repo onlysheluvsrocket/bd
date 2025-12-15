@@ -126,32 +126,40 @@ month : date [NOT NULL] — месяц планирования (хранитс�
 planned_amount : numeric(15,2) [NOT NULL] [CHECK >= 0] — плановая сумма расходов
 
 ## 4. Физическая модель (DDL для PostgreSQL)
-Сущность "СЧЕТА" (Accounts)
-Атрибут	Тип	Обязательность	Описание
-id	integer	✅ PK	Суррогатный первичный ключ
-name	varchar(100)	✅ NOT NULL	Название счета ("Основная карта")
-bank_name	varchar(100)	❌ NULL	Наименование банка
-type	varchar(50)	✅ NOT NULL	Тип: дебетовый/кредитный/наличные
-balance	numeric(15,2)	✅ NOT NULL	Текущий баланс
-Сущность "КАТЕГОРИИ" (Categories)
-Атрибут	Тип	Обязательность	Описание
-id	integer	✅ PK	Суррогатный первичный ключ
-name	varchar(100)	✅ NOT NULL	Название категории
-cat_type	varchar(10)	✅ NOT NULL	Тип: доход/расход
-Сущность "ТРАНЗАКЦИИ" (Transactions)
-Атрибут	Тип	Обязательность	Описание
-id	integer	✅ PK	Суррогатный первичный ключ
-account_id	integer	✅ FK → СЧЕТА	Ссылка на счет
-category_id	integer	✅ FK → КАТЕГОРИИ	Ссылка на категорию
-amount	numeric(15,2)	✅ NOT NULL	Сумма операции (>0)
-operation_date	date	✅ NOT NULL	Дата операции
-description	text	❌ NULL	Описание
-Сущность "ПЛАНЫ_БЮДЖЕТА" (BudgetPlans)
-Атрибут	Тип	Обязательность	Описание
-id	integer	✅ PK	Суррогатный первичный ключ
-category_id	integer	✅ FK → КАТЕГОРИИ	Категория расхода
-month	date	✅ NOT NULL	Месяц планирования
-planned_amount	numeric(15,2)	✅ NOT NULL	Плановая сумма (>=0)
+-- Таблица СЧЕТА
+CREATE TABLE accounts (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    bank_name VARCHAR(100),
+    type VARCHAR(50) NOT NULL CHECK (type IN ('дебетовый', 'кредитный', 'наличные')),
+    balance NUMERIC(15,2) NOT NULL DEFAULT 0.00
+);
+
+-- Таблица КАТЕГОРИИ
+CREATE TABLE categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    cat_type VARCHAR(10) NOT NULL CHECK (cat_type IN ('доход', 'расход'))
+);
+
+-- Таблица ТРАНЗАКЦИИ
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    category_id INTEGER NOT NULL REFERENCES categories(id),
+    amount NUMERIC(15,2) NOT NULL CHECK (amount > 0),
+    operation_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    description TEXT
+);
+
+-- Таблица ПЛАНЫ_БЮДЖЕТА
+CREATE TABLE budget_plans (
+    id SERIAL PRIMARY KEY,
+    category_id INTEGER NOT NULL REFERENCES categories(id),
+    month DATE NOT NULL,
+    planned_amount NUMERIC(15,2) NOT NULL CHECK (planned_amount >= 0),
+    UNIQUE(category_id, month)
+);
 -- ============================================
 -- Индексы для оптимизации производительности
 -- ============================================
@@ -226,55 +234,26 @@ DEFAULT — задает значение по умолчанию при вст�
 
 -- Выходной документ 1: Отчет о превышении бюджета
 SELECT 
-    cat.name AS "Категория расхода",
-    COALESCE(SUM(t.amount), 0) AS "Фактические расходы",
-    bp.planned_amount AS "Плановый бюджет",
-    (COALESCE(SUM(t.amount), 0) - bp.planned_amount) AS "Отклонение",
-    CASE 
-        WHEN COALESCE(SUM(t.amount), 0) > bp.planned_amount 
-            THEN 'ПЕРЕРАСХОД'
-        WHEN COALESCE(SUM(t.amount), 0) < bp.planned_amount 
-            THEN 'ЭКОНОМИЯ'
-        ELSE 'В ПЛАНЕ'
-    END AS "Статус"
+    cat.name AS "Категория",
+    COALESCE(SUM(t.amount), 0) AS "Факт",
+    bp.planned_amount AS "План",
+    (COALESCE(SUM(t.amount), 0) - bp.planned_amount) AS "Отклонение"
 FROM categories cat
-INNER JOIN budget_plans bp ON cat.id = bp.category_id
-    AND bp.month = DATE_TRUNC('month', CURRENT_DATE)
+JOIN budget_plans bp ON cat.id = bp.category_id
 LEFT JOIN transactions t ON cat.id = t.category_id
-    AND DATE_TRUNC('month', t.operation_date) = DATE_TRUNC('month', CURRENT_DATE)
 WHERE cat.cat_type = 'расход'
 GROUP BY cat.id, cat.name, bp.planned_amount
-HAVING COALESCE(SUM(t.amount), 0) > bp.planned_amount  -- Только превышения
-ORDER BY "Отклонение" DESC;  -- Сортировка по величине перерасхода
+ORDER BY "Отклонение" DESC;
 
-Запрос 2: Динамика остатка на основном счете за последние 6 месяцев
-
--- Выходной документ 2: Динамика остатка на счете
-WITH monthly_summary AS (
-    SELECT
-        DATE_TRUNC('month', t.operation_date) AS month_start,
-        SUM(CASE WHEN cat.cat_type = 'доход' THEN t.amount ELSE 0 END) AS total_income,
-        SUM(CASE WHEN cat.cat_type = 'расход' THEN t.amount ELSE 0 END) AS total_expense,
-        COUNT(*) AS transaction_count
-    FROM transactions t
-    INNER JOIN categories cat ON t.category_id = cat.id
-    WHERE t.account_id = 1  -- ID основного счета
-        AND t.operation_date >= CURRENT_DATE - INTERVAL '6 months'
-    GROUP BY DATE_TRUNC('month', t.operation_date)
-)
+-- Выходной документ 2: Динамика остатка
 SELECT 
-    TO_CHAR(month_start, 'YYYY-MM') AS "Период",
-    total_income AS "Доходы за месяц",
-    total_expense AS "Расходы за месяц",
-    (total_income - total_expense) AS "Изменение баланса",
-    transaction_count AS "Количество операций",
-    -- Накопительный баланс (при условии начального баланса 0)
-    SUM(total_income - total_expense) OVER (
-        ORDER BY month_start 
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ) AS "Накопительный итог"
-FROM monthly_summary
-ORDER BY month_start DESC;  -- Сортировка по дате (последние месяцы вверху)
+    DATE_TRUNC('month', operation_date) AS "Месяц",
+    SUM(CASE WHEN cat.cat_type = 'доход' THEN t.amount ELSE -t.amount END) AS "Изменение"
+FROM transactions t
+JOIN categories cat ON t.category_id = cat.id
+WHERE t.account_id = 1
+GROUP BY DATE_TRUNC('month', operation_date)
+ORDER BY "Месяц" DESC;
 
 
 ## 6. -- Вставка тестовых данных (минимум 4 строки в каждой таблице)

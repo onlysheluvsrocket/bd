@@ -126,6 +126,9 @@ month : date [NOT NULL] — месяц планирования (хранитс�
 planned_amount : numeric(15,2) [NOT NULL] [CHECK >= 0] — плановая сумма расходов
 
 ## 4. Физическая модель (DDL для PostgreSQL)
+## 4. Физическая модель (DDL для PostgreSQL)
+
+```sql
 -- Таблица СЧЕТА
 CREATE TABLE accounts (
     id SERIAL PRIMARY KEY,
